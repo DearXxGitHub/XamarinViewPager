@@ -20,7 +20,7 @@ namespace XamarinViewPager
     {
         public static String TAG = "XamarinViewPager";
 
-        private Dictionary<int, object> mObjs = new Dictionary<int, object>();
+        private Dictionary<int, Java.Lang.Object> mObjs = new Dictionary<int, Java.Lang.Object>();
 
         private static float SCALE_MAX = 0.5f;
         private static float ZOOM_MAX = 0.5f;
@@ -159,11 +159,13 @@ namespace XamarinViewPager
                         left.MeasuredHeight);
                     left.PivotX = left.MeasuredWidth / 2;
                     left.PivotY = left.MeasuredHeight / 2;
+                    left.TranslationX = mTrans;
                     left.RotationY = mRot;
                 }
                 if(right != null)
                 {
                     ManageLayer(right, true);
+                    mRot = -30f * (1 - positionOffset);
                     mTrans = GetOffsetXForRotation(mRot, right.MeasuredWidth,
                         MeasuredHeight);
                     right.PivotX = right.MeasuredWidth * 0.5f;
@@ -182,7 +184,7 @@ namespace XamarinViewPager
                 {
                     ManageLayer(left, true);
                     mRot = (sn ? 90f : -90f) * positionOffset;
-                    left.PivotX = left.MeasuredWidth * 0.5f;
+                    left.PivotX = left.MeasuredWidth;
                     left.PivotY = left.MeasuredHeight * 0.5f;
                     left.RotationY = mRot;
                 }
@@ -431,5 +433,184 @@ namespace XamarinViewPager
             return (width - mTempFloat2[0]) * (degress > 0f ? 1f : -1f);
         }
 
+        protected virtual void AnimateFade(View left, View right, float positionOffset)
+        {
+            if (left != null)
+            {
+                left.Alpha = 1 - positionOffset;
+            }
+            if (right != null)
+            {
+                right.Alpha = positionOffset;
+            }
+        }
+
+        protected virtual void AnimateOutline(View left, View right)
+        {
+            if (!(left is OutlineContainer))
+                return;
+            if (mState != State.IDLE)
+            {
+                if (left != null)
+                {
+                    ManageLayer(left, true);
+                    ((OutlineContainer)left).SetOutlineAlpha(1f);
+                }
+                if (right != null)
+                {
+                    ManageLayer(right, true);
+                    ((OutlineContainer)right).SetOutlineAlpha(1f);
+                }
+            }
+            else
+            {
+                if (left != null)
+                {
+                    ((OutlineContainer)left).Start();
+                }
+                if (right != null)
+                {
+                    ((OutlineContainer)right).Start();
+                }
+            }
+        }
+
+        protected override void OnPageScrolled(int position, float offset, int offsetPixels)
+        {
+            if (mState == State.IDLE && offset > 0)
+            {
+                oldPage = CurrentItem;
+                mState = position == oldPage ? State.GOING_RIGHT : State.GOING_LEFT;
+            }
+            bool goingRight = position == oldPage;
+            if (mState == State.GOING_RIGHT && !goingRight)
+            {
+                mState = State.GOING_LEFT;
+            }
+            else if (mState == State.GOING_LEFT && goingRight)
+            {
+                mState = State.GOING_RIGHT;
+            }
+
+            float effectOffset = IsSmall(offset) ? 0 : offset;
+
+            mLeft = FindViewFromObject(position);
+            mRight = FindViewFromObject(position + 1);
+
+            if (FadeEnable)
+            {
+                AnimateFade(mLeft, mRight, effectOffset);
+            }
+            if (OutlineEnable)
+            {
+                AnimateOutline(mLeft, mRight);
+            }
+
+            switch (TransitionEffect)
+            {
+                case global::XamarinViewPager.TransitionEffect.Standard:
+                    break;
+                case global::XamarinViewPager.TransitionEffect.Tablet:
+                    {
+                        AnimateTablet(mLeft, mRight, effectOffset);
+                    }
+                    break;
+                case global::XamarinViewPager.TransitionEffect.CubeIn:
+                    {
+                        AnimateCube(mLeft, mRight, effectOffset, true);
+                    }
+                    break;
+                case global::XamarinViewPager.TransitionEffect.CubeOut:
+                    {
+                        AnimateCube(mLeft, mRight, effectOffset, false);
+                    }
+                    break;
+                case global::XamarinViewPager.TransitionEffect.FlipVertical:
+                    {
+                        AnimateFlipVertical(mLeft, mRight, offset, offsetPixels);
+                    }
+                    break;
+                case global::XamarinViewPager.TransitionEffect.FlipHouizontal:
+                    {
+                        AnimateFlipHorizontal(mLeft, mRight, effectOffset, offsetPixels);
+                    }
+                    break;
+                case global::XamarinViewPager.TransitionEffect.Stack:
+                    {
+                        AnimateStack(mLeft, mRight, effectOffset, offsetPixels);
+                    }
+                    break;
+                case global::XamarinViewPager.TransitionEffect.ZoomIn:
+                    {
+                        AnimateZoom(mLeft, mRight, effectOffset, true);
+                    }
+                    break;
+                case global::XamarinViewPager.TransitionEffect.ZoomOut:
+                    {
+                        AnimateZoom(mLeft, mRight, effectOffset, false);
+                    }
+                    break;
+                case global::XamarinViewPager.TransitionEffect.RotateUp:
+                    {
+                        AnimateRotate(mLeft, mRight, effectOffset, true);
+                    }
+                    break;
+                case global::XamarinViewPager.TransitionEffect.RotateDown:
+                    {
+                        AnimateRotate(mLeft, mRight, effectOffset, false);
+                    }
+                    break;
+                case global::XamarinViewPager.TransitionEffect.Accordion:
+                    {
+                        AnimateAccordion(mLeft, mRight, effectOffset);
+                    }
+                    break;
+            }
+
+            base.OnPageScrolled(position, offset, offsetPixels);
+
+            if (effectOffset == 0)
+            {
+                DisableHardwareLayer();
+                mState = State.IDLE;
+            }
+        }
+
+        public View FindViewFromObject(int position)
+        {
+            Java.Lang.Object o = null;
+            mObjs.TryGetValue(position, out o);
+            if (o == null)
+                return null;
+
+            PagerAdapter a = Adapter;
+            View v = null;
+            for (int i = 0; i < ChildCount; i++)
+            {
+                v = GetChildAt(i);
+                if (a.IsViewFromObject(v, o))
+                {
+                    return v;
+                }
+            }
+            return null;
+        }
+
+        private bool IsSmall(float offset)
+        {
+            return Math.Abs(offset) < 0.0001;
+        }
+
+        public void SetObjectForPosition(Java.Lang.Object obj, int position)
+        {
+            if (mObjs.ContainsKey(position))
+            {
+                mObjs[position] = obj;
+            }
+            else
+            {
+                mObjs.Add(position, obj);
+            }
+        }
     }
 }
